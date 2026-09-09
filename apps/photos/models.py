@@ -1,5 +1,4 @@
 from django.db import models
-from pgvector.django import VectorField
 
 
 class Photo(models.Model):
@@ -13,7 +12,7 @@ class FaceEmbedding(models.Model):
     photo = models.ForeignKey(
         Photo, on_delete=models.CASCADE, related_name='face_embeddings'
     )
-    embedding = VectorField(dimensions=512)
+    embedding = models.JSONField()
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

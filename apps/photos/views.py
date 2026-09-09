@@ -4,7 +4,6 @@ import cv2
 from django.db.models import Count
 import numpy as np
 from django.conf import settings
-from pgvector.django import CosineDistance
 from rest_framework import status
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
@@ -166,25 +165,31 @@ class FaceScanView(APIView):
                 "error": str(exc),
             }, status=status.HTTP_200_OK)
 
-        matches = (
-            FaceEmbedding.objects
-            .select_related("photo")
-            .annotate(
-                distance=CosineDistance(
-                    "embedding",
-                    embedding,
-                )
-            )
-            .filter(distance__lte=0.40)
-            .order_by("distance")
-        )
+        matches = []
+        embeddings_qs = list(FaceEmbedding.objects.select_related("photo"))
+
+        for face_embedding in embeddings_qs:
+            stored = np.asarray(face_embedding.embedding, dtype=np.float32)
+            query = np.asarray(embedding, dtype=np.float32)
+
+            if stored.shape != query.shape:
+                continue
+
+            denom = np.linalg.norm(stored) * np.linalg.norm(query)
+            cosine_similarity = float(np.dot(stored, query) / denom) if denom else 0.0
+            distance = 1.0 - cosine_similarity
+
+            if distance <= 0.40:
+                matches.append((distance, face_embedding))
+
+        matches.sort(key=lambda item: item[0])
 
         photos = []
         seen_photo_ids = set()
 
-        for match in matches:
+        for distance, face_embedding in matches:
 
-            photo = match.photo
+            photo = face_embedding.photo
 
             if photo.id in seen_photo_ids:
                 continue
